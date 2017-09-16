@@ -2,7 +2,8 @@
  * StrainEffector.cpp
  *
  * Created: 18/03/2017 15:13:49
- * Author : David
+ * Author : David Crocker, Escher Technologies Limited
+ * License: GNU GPL version 3
  *
  * Version 1.3, 2017-07-31
  */ 
