@@ -660,7 +660,7 @@ writes(strainFilter; volatile)
 	{
 		DelayTicks(3 * slowTickFrequency);						// wait 3 seconds to allow the supply and the sense amplifier to stabilise
 		readEEPROM(0u, reinterpret_cast<uint8_t* array>(&nvData), sizeof(nvData));
-		nvDataValid = ((nvData.sensitivity ^ nvData.checksum) == NvData::magic);
+		nvDataValid = ((nvData.sensitivity ^ nvData.flags ^ nvData.checksum) == NvData::magic);
 	} while (SelfTest());
 
 	const uint16_t thresholdMillivolts = (nvDataValid && (nvData.flags & NvData::FlagCustomSensitivity) != 0) ? nvData.sensitivity : defaultThresholdMilliVolts;
