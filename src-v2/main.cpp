@@ -6,6 +6,8 @@
  * License: GNU GPL version 3
  */ 
 
+// 2019-11-07: Merged pull request from user dgrat to fix retention of custom settings
+
 #include "ecv.h"
 
 #ifdef __ECV__
@@ -146,10 +148,10 @@ public:
 void Filter::Init(uint16_t initialValue)
 {
 	for (uint8_t i = 0; i < strainReadingsAveraged; ++i)
-	writes(i; readings; volatile)
-	keep(i <= strainReadingsAveraged)
-	keep(forall j in 0..(i-1) :- readings[j] == 0)
-	decrease(strainReadingsAveraged - i)
+		writes(i; readings; volatile)
+		keep(i <= strainReadingsAveraged)
+		keep(forall j in 0..(i-1) :- readings[j] == 0)
+		decrease(strainReadingsAveraged - i)
 	{
 		readings[i] = initialValue;
 	}
@@ -293,7 +295,7 @@ ISR(TIM0_OVF_vect)
 }
 
 // Get a 16-bit volatile value from outside the ISR. As it's more than 8 bits long, we need to disable interrupts while fetching it.
-inline uint16_t GetVolatileWord(volatile uint16_t& val)
+inline uint16_t GetVolatileWord(const volatile uint16_t& val)
 writes(volatile)
 {
 	cli();
@@ -411,6 +413,7 @@ post(numBytesReceived < MaxBytesReceived)
 				writeEEPROM(0, reinterpret_cast<const uint8_t* array>(&nvData), sizeof(nvData));
 				UpdateEEPROM();
 				FlashLed(1);
+				// We do not clear nvDataValid here, because if we did then the main loop would see that MOD is low and initialize the nvData again
 			}
 			numBytesReceived = 0;
 		}
@@ -580,9 +583,7 @@ writes(volatile)
 {
 	ADMUX = (uint8_t)(AdcBridgePowerInputChan | BITVAL(REFS1));	// select the input from the bridge supply, 1.1V reference
 	DelayTicks(slowTickFrequency/100);						// wait 10ms to accumulate a full filter of bridge supply voltage readings
-	cli();
-	const uint16_t bridgeVoltage = strainFilter.sum;		// get the bridge voltage supply reading
-	sei();
+	const uint16_t bridgeVoltage = GetVolatileWord(strainFilter.sum);		// get the bridge voltage supply reading
 
 	// Bridge supply is 1.0V, ADC reference is 1.0 to 1.2V, so the reading should be at least 1024 * (1.0/1.2) = 853. We allow a slightly wider tolerance than that.
 	if (bridgeVoltage < 840 * strainReadingsAveraged)
@@ -594,9 +595,7 @@ writes(volatile)
 	// Check the strain gauge output voltage. It should be close to half the bridge supply voltage.
 	ADMUX = (uint8_t)(AdcStrainInputChan | BITVAL(REFS1));	// select the input from the bridge supply, 1.1V reference
 	DelayTicks(slowTickFrequency/100);						// wait 10ms to accumulate a full filter of strain output readings
-	cli();
-	const uint16_t bridgeOutput = strainFilter.sum;
-	sei();
+	const uint16_t bridgeOutput = GetVolatileWord(strainFilter.sum);
 
 	const uint16_t expectedOutput = bridgeVoltage/2u;
 	const uint16_t allowedError = (nvDataValid) ? expectedOutput/8u + expectedOutput/16u : expectedOutput/8u;	// we allow about 25% tolerance during initial testing, higher after that
