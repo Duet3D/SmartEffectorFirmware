@@ -30,7 +30,11 @@ extern void cli();
 extern void sei();
 #endif
 
-#define STRAIN_RESISTORS	(1)		// set nonzero for new hardware with 2.5V regulator and discrete strain gauge resistors, or zero for PCB strain gauge version.
+#if !defined(HARDWARE_VERSION) || (HARDWARE_VERSION != 2 && HARDWARE_VERSION != 3)
+# error HARDWARE_VERSION must be defined as 2 or 3
+#endif
+
+#define STRAIN_RESISTORS	(HARDWARE_VERSION >= 3)		// set nonzero for new hardware with 2.5V regulator and discrete strain gauge resistors, or zero for PCB strain gauge version.
 #define ISR_DEBUG			(0)
 
 #define BITVAL(_x) static_cast<uint8_t>(1u << (_x))
