@@ -16,8 +16,8 @@ Global
 		{DCE6C7E3-EE26-4D79-826B-08594B9AD897}.Debug|AVR.Build.0 = Debug|AVR
 		{DCE6C7E3-EE26-4D79-826B-08594B9AD897}.Release-v2|AVR.ActiveCfg = Release-v2|AVR
 		{DCE6C7E3-EE26-4D79-826B-08594B9AD897}.Release-v2|AVR.Build.0 = Release-v2|AVR
-		{DCE6C7E3-EE26-4D79-826B-08594B9AD897}.Release-v3|AVR.ActiveCfg = Release_v3|AVR
-		{DCE6C7E3-EE26-4D79-826B-08594B9AD897}.Release-v3|AVR.Build.0 = Release_v3|AVR
+		{DCE6C7E3-EE26-4D79-826B-08594B9AD897}.Release-v3|AVR.ActiveCfg = Release-v3|AVR
+		{DCE6C7E3-EE26-4D79-826B-08594B9AD897}.Release-v3|AVR.Build.0 = Release-v3|AVR
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

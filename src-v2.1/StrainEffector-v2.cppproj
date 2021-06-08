@@ -41,7 +41,7 @@
       </framework-data>
     </AsfFrameworkConfig>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)' == 'Release_v3' ">
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release-v3' ">
     <ToolchainSettings>
       <AvrGccCpp>
   <avrgcc.common.Device>-mmcu=attiny44a -B "%24(PackRepoDir)\atmel\ATtiny_DFP\1.3.172\gcc\dev\attiny44a"</avrgcc.common.Device>
@@ -96,6 +96,8 @@
   </avrgcccpp.assembler.general.IncludePaths>
 </AvrGccCpp>
     </ToolchainSettings>
+    <OutputFileName>StrainEffector-hardware-v3</OutputFileName>
+    <OutputFileExtension>.elf</OutputFileExtension>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <ToolchainSettings>
@@ -211,6 +213,8 @@
 </AvrGccCpp>
     </ToolchainSettings>
     <OutputPath>bin\Release-v2\</OutputPath>
+    <OutputFileName>StrainEffector-hardware-v2</OutputFileName>
+    <OutputFileExtension>.elf</OutputFileExtension>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="main.cpp">
