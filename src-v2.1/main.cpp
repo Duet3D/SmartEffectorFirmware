@@ -710,12 +710,20 @@ writes(strainFilter; volatile)
 		GIMSK = BITVAL(PCIE0);								// enable pin change interrupt 0
 		PCMSK0 = BITVAL(PinChange0InputBitNum);				// enable pin change interrupt on just the input pin
 	}
+#if STRAIN_RESISTORS
+	else
+	{
+		nvData.flags = 0;
+		UpdateEEPROM();
+	}
+#endif
 
 	// Set up the rolling average
 	shiftedRollingAverage = strainFilter.sum;
 	rollingAverage = ((uint32_t)shiftedRollingAverage) << avShift;
 
 	sei();
+
 
 	// Start main loop
 	for (;;)
@@ -742,12 +750,14 @@ writes(strainFilter; volatile)
 
 		CheckForReceivedData();
 		CheckWatchdog();
+#if !STRAIN_RESISTORS
 		if (!nvDataValid && (PINA & BITVAL(PortADuetInputBitNum)) == 0)
 		{
 			nvData.flags = 0;
 			UpdateEEPROM();
 			FlashLed(2);
 		}
+#endif
 	}
 
 #ifdef __ECV__
