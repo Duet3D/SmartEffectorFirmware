@@ -108,6 +108,32 @@ const unsigned int MaxBytesReceived = 3;					// maximum number of received bytes
 const uint8_t ProgByte = 105;								// magic byte to start programming custom sensitivity
 const uint8_t EraseByte = 131;								// magic byte to clear custom sensitivity
 const uint8_t FactoryResetByte = 65;						// magic byte to clear EEPROM
+const uint8_t ReceiveTestByte = 99;							// magic byte to report default or custom sensitivity
+
+// LED flash codes
+enum class FlashCode : uint8_t
+{
+	StartupOkNoNvData = 1,
+	StartupOkStandardSensitivity = 2,
+	StartupOkCustomSensitivity = 3,
+	CustomSensitivitySet = 4,
+	DefaultSensitivitySet = 5,
+	BridgeOutputTooLow = 6,
+	BridgeOutputTooHigh = 7,
+	BadBridgeSupply = 9,			// version 2 hardware only
+	VccTooLow = 9,					// version 3 hardware only
+	VccTooHigh = 10					// version 3 hardware only
+};
+
+#if STRAIN_RESISTORS
+
+constexpr float Vref = 2.8;
+constexpr float VccMin = 2.95;
+constexpr float VccMax = 5.5;
+constexpr uint16_t VccMaxAdcReading = (uint16_t)(1024 * strainReadingsAveraged * Vref / VccMax);
+constexpr uint16_t VccMinAdcReading = (uint16_t)(1024 * strainReadingsAveraged * Vref / VccMin);
+
+#endif
 
 struct NvData
 {
@@ -363,14 +389,19 @@ writes(volatile)
 
 void UpdateThreshold(uint16_t mv)
 {
+#if STRAIN_RESISTORS
+	threshold = ((uint32_t)mv * strainReadingsAveraged * 1024u)/2800u;		// we use the 2.8V voltage reference for the ADC
+#else
 	threshold = ((uint32_t)mv * strainReadingsAveraged * 1024u)/1100u;		// we use the 1.1V internal voltage reference for the ADC
+#endif
 }
 
 // Flash the LED the specified number of times
-void FlashLed(uint8_t numFlashes)
+void FlashLed(FlashCode fc)
 {
 	SetLedOff();
 	DelayTicks(ledFlashTicks);
+	uint8_t numFlashes = (uint8_t)fc;
 	while (numFlashes != 0)
 	{
 		SetLedOn();
@@ -403,7 +434,7 @@ post(numBytesReceived < MaxBytesReceived)
 				nvData.flags &= ~NvData::FlagCustomSensitivity;
 				UpdateThreshold(defaultThresholdMilliVolts);
 				UpdateEEPROM();
-				FlashLed(5);
+				FlashLed(FlashCode::DefaultSensitivitySet);
 			}
 			numBytesReceived = 0;
 		}
@@ -417,8 +448,19 @@ post(numBytesReceived < MaxBytesReceived)
 				nvData.flags = nvData.sensitivity = nvData.checksum = 0xFFFF;
 				writeEEPROM(0, reinterpret_cast<const uint8_t* array>(&nvData), sizeof(nvData));
 				UpdateEEPROM();
-				FlashLed(1);
+				FlashLed(FlashCode::StartupOkNoNvData);
 				// We do not clear nvDataValid here, because if we did then the main loop would see that MOD is low and initialize the nvData again
+			}
+			numBytesReceived = 0;
+		}
+		break;
+
+	case ReceiveTestByte:
+		if (numBytesReceived >= 2)
+		{
+			if (bytesReceived[1] == ReceiveTestByte)
+			{
+				FlashLed((nvData.flags & NvData::FlagCustomSensitivity) ? FlashCode::StartupOkCustomSensitivity : FlashCode::StartupOkStandardSensitivity);
 			}
 			numBytesReceived = 0;
 		}
@@ -434,7 +476,7 @@ post(numBytesReceived < MaxBytesReceived)
 				nvData.sensitivity = (uint16_t)bytesReceived[1] + 1u;		// received values of 0-255 give sensitivity of 1-256mV
 				UpdateThreshold(nvData.sensitivity);
 				UpdateEEPROM();
-				FlashLed(4);
+				FlashLed(FlashCode::CustomSensitivitySet);
 			}
 			numBytesReceived = 0;
 		}
@@ -595,22 +637,22 @@ writes(volatile)
 	const uint16_t bridgeVoltage = GetVolatileWord(strainFilter.sum);		// get the bridge voltage supply reading
 
 #if STRAIN_RESISTORS
-	// Bridge supply is 2.5V, ADC reference is 3.0 to 5.5V, so the reading should be at between 1024 * (2.5/5.5) = 465.5 and 1024 * (2.5/3.0) = 853.3.
-	if (bridgeVoltage > 854 * strainReadingsAveraged)
+	// Check that Vcc is in range by measuring the voltage regulator output using Vcc as the reference
+	if (bridgeVoltage > VccMinAdcReading)
 	{
-		FlashLed(9);														// Vcc too low
+		FlashLed(FlashCode::VccTooLow);
 		return true;
 	}
-	else if (bridgeVoltage < 465 * strainReadingsAveraged)					// Vcc too high
+	else if (bridgeVoltage < VccMaxAdcReading)
 	{
-		FlashLed(10);
+		FlashLed(FlashCode::VccTooHigh);
 		return true;
 	}
 #else
 	// Bridge supply is 1.0V, ADC reference is 1.0 to 1.2V, so the reading should be at least 1024 * (1.0/1.2) = 853. We allow a slightly wider tolerance than that.
 	if (bridgeVoltage < 840 * strainReadingsAveraged)
 	{
-		FlashLed(9);
+		FlashLed(FlashCode::BadBridgeSupply);
 		return true;
 	}
 #endif
@@ -631,25 +673,25 @@ writes(volatile)
 	const uint16_t expectedOutput = bridgeVoltage/2u;
 	const uint16_t allowedError = (nvDataValid) ? expectedOutput/8u + expectedOutput/16u : expectedOutput/8u;	// we allow about 25% tolerance during initial testing, higher after that
 #endif
-	uint8_t numFlashes;
+	FlashCode fc;
 	bool error = true;
 	if (bridgeOutput > expectedOutput + allowedError)
 	{
-		numFlashes = 7u;
+		fc = FlashCode::BridgeOutputTooHigh;
 	}
 	else if (bridgeOutput < expectedOutput - allowedError)
 	{
-		 numFlashes = 6u;
+		 fc = FlashCode::BridgeOutputTooLow;
 	}
 	else
 	{
 		error = false;
-		numFlashes = (!nvDataValid) ? 1u
-					: (nvData.flags & NvData::FlagCustomSensitivity) ? 3u
-					: 2u;
+		fc = (!nvDataValid) ? FlashCode::StartupOkNoNvData
+				: (nvData.flags & NvData::FlagCustomSensitivity) ? FlashCode::StartupOkCustomSensitivity
+					: FlashCode::StartupOkStandardSensitivity;
 	}
 
-	FlashLed(numFlashes);
+	FlashLed(fc);
 	return error;
 }
 
@@ -701,22 +743,25 @@ writes(strainFilter; volatile)
 	const uint16_t thresholdMillivolts = (nvDataValid && (nvData.flags & NvData::FlagCustomSensitivity) != 0) ? nvData.sensitivity : defaultThresholdMilliVolts;
 	UpdateThreshold(thresholdMillivolts);
 
+#if STRAIN_RESISTORS
+	if (!nvDataValid)
+	{
+		nvData.flags = 0;
+		UpdateEEPROM();
+	}
+#endif
+
 	cli();
 
+#if !STRAIN_RESISTORS
 	if (nvDataValid)
+#endif
 	{
 		// Set up pin change interrupt for detecting programming signals
 		GIFR = BITVAL(PCIF0);								// clear any existing interrupt
 		GIMSK = BITVAL(PCIE0);								// enable pin change interrupt 0
 		PCMSK0 = BITVAL(PinChange0InputBitNum);				// enable pin change interrupt on just the input pin
 	}
-#if STRAIN_RESISTORS
-	else
-	{
-		nvData.flags = 0;
-		UpdateEEPROM();
-	}
-#endif
 
 	// Set up the rolling average
 	shiftedRollingAverage = strainFilter.sum;
@@ -750,12 +795,13 @@ writes(strainFilter; volatile)
 
 		CheckForReceivedData();
 		CheckWatchdog();
+
 #if !STRAIN_RESISTORS
 		if (!nvDataValid && (PINA & BITVAL(PortADuetInputBitNum)) == 0)
 		{
 			nvData.flags = 0;
 			UpdateEEPROM();
-			FlashLed(2);
+			FlashLed(FlashCode::StartupOkStandardSensitivity);
 		}
 #endif
 	}
