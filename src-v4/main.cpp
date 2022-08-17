@@ -157,7 +157,13 @@ struct NvData
 	uint16_t checksum;
 	static const uint16_t magic = 0x56A2;
 	static const uint16_t FlagCustomSensitivity = 0x0001;
-} nvData;
+
+	bool IsValid() const;
+};
+
+bool NvData::IsValid() const { return (sensitivity ^ flags ^ checksum) == magic; }
+
+NvData nvData;
 
 #ifndef __ECV__
 FUSES = {0xE2u, 0xDFu, 0xFFu};		// 8MHz RC clock
@@ -208,7 +214,6 @@ uint16_t timeOn = 0;										// when we last turned the LED on
 volatile uint32_t rollingAverage = 0;
 volatile uint16_t shiftedRollingAverage = 0;				// this is always equal to (rollingAverage >> avShift)
 
-bool nvDataValid;
 uint16_t threshold;											// this sets the sensitivity
 bool signedAdc = false;
 
@@ -431,7 +436,6 @@ void UpdateEEPROM()
 {
 	nvData.checksum = NvData::magic ^ nvData.sensitivity ^ nvData.flags;
 	writeEEPROM(0, reinterpret_cast<const uint8_t* array>(&nvData), sizeof(nvData));
-	nvDataValid = true;
 }
 
 // Check whether we have received a valid message.
@@ -699,7 +703,9 @@ writes(volatile)
 	const uint16_t bridgeOutput = GetVolatileWord(strainFilter.sum);
 
 	const uint16_t expectedOutput = 1024u/2u * strainReadingsAveraged;
-	const uint16_t allowedError = 25u * strainReadingsAveraged;				// we allow about 5% tolerance
+			
+	// We allow about 5% difference between the resistances during the initial self-test before the nvData is set up, and 10% after that. 5% error will change the ADC reading by 12.5
+	const uint16_t allowedError = (nvData.IsValid()) ? 25u * strainReadingsAveraged : 13 * strainReadingsAveraged;
 	FlashCode fc;
 	bool error = true;
 	if (bridgeOutput > expectedOutput + allowedError)
@@ -713,7 +719,7 @@ writes(volatile)
 	else
 	{
 		error = false;
-		fc = (!nvDataValid) ? FlashCode::StartupOkNoNvData
+		fc = (!nvData.IsValid()) ? FlashCode::StartupOkNoNvData
 				: (nvData.flags & NvData::FlagCustomSensitivity) ? FlashCode::StartupOkCustomSensitivity
 					: FlashCode::StartupOkStandardSensitivity;
 	}
@@ -767,13 +773,12 @@ writes(strainFilter; volatile)
 	{
 		DelayTicks(3 * slowTickFrequency);					// wait 3 seconds to allow the supply and the sense amplifier to stabilise
 		readEEPROM(0u, reinterpret_cast<uint8_t* array>(&nvData), sizeof(nvData));
-		nvDataValid = ((nvData.sensitivity ^ nvData.flags ^ nvData.checksum) == NvData::magic);
 	} while (SelfTest());
 
-	const uint16_t thresholdMillivolts = (nvDataValid && (nvData.flags & NvData::FlagCustomSensitivity) != 0) ? nvData.sensitivity : defaultThresholdMilliVolts;
+	const uint16_t thresholdMillivolts = (nvData.IsValid() && (nvData.flags & NvData::FlagCustomSensitivity) != 0) ? nvData.sensitivity : defaultThresholdMilliVolts;
 	UpdateThreshold(thresholdMillivolts);
 
-	if (!nvDataValid)
+	if (!nvData.IsValid())
 	{
 		nvData.flags = 0;
 		UpdateEEPROM();
