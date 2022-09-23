@@ -92,6 +92,14 @@ constexpr uint16_t strainReadingsAveraged = 32;					// 32 readings @ 2 bytes eac
 constexpr uint16_t strainReadingsAveraged = 16;					// 16 readings @ 2 bytes each = 32 bytes
 #endif
 
+// The percentage imbalance between top and bottom trace resistance is defined as 100*(Rt-Rl)/(Rt+Rl). We plan to allow up to 4% from the manufacturer
+constexpr float MaxImbalancePercentInTesting = 4.5;
+constexpr float MaxImbalancePercentInNormalUse = 8.0;
+constexpr uint16_t MaxImbalanceReadingInTesting = (uint16_t)((MaxImbalancePercentInTesting * 1024.0)/200.0 + 0.5);
+constexpr uint16_t MaxImbalanceReadingInNormalUse = (uint16_t)((MaxImbalancePercentInNormalUse * 1024.0)/200.0 + 0.5);
+static_assert(MaxImbalanceReadingInTesting == 23, "unexpected value");
+static_assert(MaxImbalanceReadingInNormalUse == 41, "unexpected value");
+
 constexpr uint16_t kickFrequency = 10;							// how often we kick the watchdog
 constexpr uint16_t kickIntervalTicks = slowTickFrequency/kickFrequency;
 
@@ -705,7 +713,7 @@ writes(volatile)
 	const uint16_t expectedOutput = 1024u/2u * strainReadingsAveraged;
 			
 	// We allow about 5% difference between the resistances during the initial self-test before the nvData is set up, and 10% after that. 5% error will change the ADC reading by 12.5
-	const uint16_t allowedError = (nvData.IsValid()) ? 25u * strainReadingsAveraged : 13 * strainReadingsAveraged;
+	const uint16_t allowedError = (nvData.IsValid()) ? MaxImbalanceReadingInNormalUse * strainReadingsAveraged : MaxImbalanceReadingInTesting * strainReadingsAveraged;
 	FlashCode fc;
 	bool error = true;
 	if (bridgeOutput > expectedOutput + allowedError)
